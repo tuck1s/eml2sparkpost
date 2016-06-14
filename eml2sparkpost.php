@@ -30,8 +30,12 @@ use SparkPost\SparkPost;
 use GuzzleHttp\Client;
 use Ivory\HttpAdapter\Guzzle6HttpAdapter;
 
+// Fetch API key
+$paramArray = parse_ini_file('sparkpost.ini', true);
+$apiKey = $paramArray['SparkPost']['Authorization'];
+
 $httpAdapter = new Guzzle6HttpAdapter(new Client());
-$sparky = new SparkPost($httpAdapter, ['key'=>'##your key here##']);
+$sparky = new SparkPost($httpAdapter, ['key'=>$apiKey]);
 
 // Grab the parameters passed to the program
 $progName = $argv[0];
@@ -75,9 +79,9 @@ $msg = new MimeMessage("file", $emlFile);
 // Collect the RFC822-format output headers, and the API-format recipient list (initialised into to/cc/bcc order for nice debug output)
 $outputHeaders = "";
 $recipsList = [
-    "to" => "",
-    "cc" => "",
-    "bcc" => ""
+    "to" => NULL,
+    "cc" => NULL,
+    "bcc" => NULL
 ];
 // Get the headers, and the lists of various types of recipients from the input file, copying across selectively
 
@@ -138,14 +142,16 @@ if($forcedTo) {
 else {
     // Collect all the recipients together into a list, with display name and email address correctly prepared for API
     foreach ($recipsList as $rlName => $rl) {
-        foreach ($rl as $r) {
-            echo($rlName . "\t\"" . $r['display'] . "\" <" . $r['address'] . ">\n");
-            $allRecips[] = [
-                'address' => [
-                    'name' => $r['display'],
-                    'email' => $r['address']
-                ]
-            ];
+        if(!is_null($rl)) {
+            foreach ($rl as $r) {
+                echo($rlName . "\t\"" . $r['display'] . "\" <" . $r['address'] . ">\n");
+                $allRecips[] = [
+                    'address' => [
+                        'name' => $r['display'],
+                        'email' => $r['address']
+                    ]
+                ];
+            }
         }
     }
 }

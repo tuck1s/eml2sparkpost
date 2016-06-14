@@ -31,8 +31,17 @@ use GuzzleHttp\Client;
 use Ivory\HttpAdapter\Guzzle6HttpAdapter;
 
 // Fetch API key
-$paramArray = parse_ini_file('sparkpost.ini', true);
+$iniFile = 'sparkpost.ini';
+if(!file_exists($iniFile)) {
+    echo("Error: no " . $iniFile . "file found.\n");
+    exit(1);
+}
+$paramArray = parse_ini_file($iniFile, true);
 $apiKey = $paramArray['SparkPost']['Authorization'];
+if(is_null($apiKey)) {
+    echo("Error: Can't find valid Authorization in " . $iniFile . "\n");
+    exit(1);
+}
 
 $httpAdapter = new Guzzle6HttpAdapter(new Client());
 $sparky = new SparkPost($httpAdapter, ['key'=>$apiKey]);
@@ -58,10 +67,11 @@ if($argc >= 2) {
 else {
     echo "\nNAME\n";
     echo "   " . $progName . "\n";
-    echo "   Converts eml file into SparkPost Transmission API JSON object.\n\n";
+    echo "   Parse and send an RFC822-compliant file (e.g. .eml extension) via SparkPost.\n\n";
     echo "SYNOPSIS\n";
     echo "  ./" . $shortProgName . " filename.eml [forced_from [forced_to] ]\n\n";
-    echo "  filename.eml must contain RFC822 formatted content including subject, from, to, and MIME parts.\n\n";
+    echo "  filename.eml must contain RFC822 formatted content including subject, from, to, and MIME parts.\n";
+    echo "  cc and bcc headers are also read and applied.\n\n";
     echo "OPTIONAL PARAMETERS\n";
     echo "    forced_from - such as test@example.com - override the From: address in the file.\n";
     echo "    forced_to - such as sender@example.com - override the To: addresses in the file\n";

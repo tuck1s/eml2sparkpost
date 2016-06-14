@@ -33,7 +33,7 @@ use Ivory\HttpAdapter\Guzzle6HttpAdapter;
 // Fetch API key
 $iniFile = 'sparkpost.ini';
 if(!file_exists($iniFile)) {
-    echo("Error: no " . $iniFile . "file found.\n");
+    echo("Error: " . $iniFile . " file not found.\n");
     exit(1);
 }
 $paramArray = parse_ini_file($iniFile, true);

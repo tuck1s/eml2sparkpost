@@ -31,7 +31,7 @@ use GuzzleHttp\Client;
 use Ivory\HttpAdapter\Guzzle6HttpAdapter;
 
 $httpAdapter = new Guzzle6HttpAdapter(new Client());
-$sparky = new SparkPost($httpAdapter, ['key'=>'5a10d379840d23effc86c7c5ff8b4f315dbe6c3b']);
+$sparky = new SparkPost($httpAdapter, ['key'=>'##your key here##']);
 
 // Grab the parameters passed to the program
 $progName = $argv[0];

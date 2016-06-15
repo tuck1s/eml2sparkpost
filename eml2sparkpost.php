@@ -44,7 +44,7 @@ if(is_null($apiKey)) {
 }
 
 $httpAdapter = new Guzzle6HttpAdapter(new Client());
-$sparky = new SparkPost($httpAdapter, ['key'=>$apiKey]);
+$sparky = new SparkPost($httpAdapter, ['key'=>$apiKey, 'timeout'=>0]);
 
 // Grab the parameters passed to the program
 $progName = $argv[0];

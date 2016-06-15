@@ -6,7 +6,7 @@ Usage is shown if you run the command with no arguments.
 
 To set up API key: create a file named sparkpost.ini as follows
 
-```
+```INI
 [SparkPost]
 Authorization = "your api key string"
 ```

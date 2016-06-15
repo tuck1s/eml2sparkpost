@@ -175,6 +175,7 @@ echo "Body:    " . strlen($body) . " bytes\n\n";
 
 try {
     // Build your email and send it!
+    $startTime = microtime(true);
     $results = $sparky->transmission->send([
         'rfc822'     => $rfc822Parts,
         'recipients' => $allRecips,
@@ -183,10 +184,14 @@ try {
             'example1' => 'newsletter'
         ],
     ]);
+    $endTime = microtime(true);
+
+    $time = $endTime - $startTime;
     echo "Message accepted by SparkPost\n";
     echo("Total accepted recipients: " . $results['results']['total_accepted_recipients'] . "\n");
     echo("Total rejected recipients: " . $results['results']['total_rejected_recipients'] . "\n");
     echo("Transmission id:           " . $results['results']['id'] . "\n");
+    echo("API call duration:         " . round($time,3) . " seconds\n");
 
 } catch (\Exception $err) {
     echo "Message rejected by SparkPost\n";

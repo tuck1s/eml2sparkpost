@@ -21,6 +21,7 @@
 // Third-party library dependencies:
 //  http://php.net/manual/en/ref.mailparse.php
 //      on Mac OSX: brew install homebrew/php/php55-mailparse
+//      on CentOS: sudo yum install php-pecl-mailparse --skip-broken
 //
 //  SparkPost PHP library - for more info see https://developers.sparkpost.com
 //      installation instructions on https://github.com/SparkPost/php-sparkpost
@@ -28,7 +29,7 @@
 require 'vendor/autoload.php';
 use SparkPost\SparkPost;
 use GuzzleHttp\Client;
-use Ivory\HttpAdapter\Guzzle6HttpAdapter;
+use Http\Adapter\Guzzle6\Client as GuzzleAdapter;
 
 // Fetch API key
 $iniFile = 'sparkpost.ini';
@@ -43,7 +44,7 @@ if(is_null($apiKey)) {
     exit(1);
 }
 
-$httpAdapter = new Guzzle6HttpAdapter(new Client());
+$httpAdapter = new GuzzleAdapter(new Client());
 $sparky = new SparkPost($httpAdapter, ['key'=>$apiKey, 'timeout'=>0]);
 
 // Grab the parameters passed to the program
@@ -173,28 +174,32 @@ $rfc822Parts = $outputHeaders . "\n" . $body;
 echo "Headers: " . strlen($outputHeaders) . " bytes\n";
 echo "Body:    " . strlen($body) . " bytes\n\n";
 
-try {
     // Build your email and send it!
     $startTime = microtime(true);
-    $results = $sparky->transmission->send([
-        'rfc822'     => $rfc822Parts,
+    $promise = $sparky->transmissions->post([
+        'content' =>  ['email_rfc822'     => $rfc822Parts],
         'recipients' => $allRecips,
         'campaign'   => 'some text',
         'metadata'   => [
             'example1' => 'newsletter'
         ],
     ]);
-    $endTime = microtime(true);
 
+try {
+    $response = $promise->wait();
+    $endTime = microtime(true);
     $time = $endTime - $startTime;
-    echo "Message accepted by SparkPost\n";
+
+    echo "Message accepted by SparkPost : https status code " . $response->getStatusCode() . "\n";
+    $results = $response->getBody();
     echo("Total accepted recipients: " . $results['results']['total_accepted_recipients'] . "\n");
     echo("Total rejected recipients: " . $results['results']['total_rejected_recipients'] . "\n");
     echo("Transmission id:           " . $results['results']['id'] . "\n");
     echo("API call duration:         " . round($time,3) . " seconds\n");
 
-} catch (\Exception $err) {
+} catch (\Exception $e) {
     echo "Message rejected by SparkPost\n";
-    var_dump($err);
+    echo $e->getCode()."\n";
+    echo $e->getMessage()."\n";
     exit(1);
 }

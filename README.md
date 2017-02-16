@@ -17,4 +17,5 @@ For SparkPost Enterprise, you can set the Host using the INI file setting, e.g.
 Authorization = "your api key string"
 Host = "yourdomain.sparkpostelite.com"
 Return-Path = "bounces@yourdomain.com"
-Binding = "outbound"```
+Binding = "outbound"
+```

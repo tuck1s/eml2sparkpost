@@ -16,7 +16,7 @@
 //limitations under the License.
 
 //
-// Author: Steve Tuck (June 2016)
+// Author: Steve Tuck, February 2017
 //
 // Third-party library dependencies:
 //  http://php.net/manual/en/ref.mailparse.php
@@ -31,21 +31,50 @@ use SparkPost\SparkPost;
 use GuzzleHttp\Client;
 use Http\Adapter\Guzzle6\Client as GuzzleAdapter;
 
-// Fetch API key
+// Fetch API key and other params from ini file
 $iniFile = 'sparkpost.ini';
 if(!file_exists($iniFile)) {
-    echo("Error: " . $iniFile . " file not found.\n");
+    echo("Error: can't find initialisation file:" . $iniFile);
     exit(1);
 }
 $paramArray = parse_ini_file($iniFile, true);
-$apiKey = $paramArray['SparkPost']['Authorization'];
-if(is_null($apiKey)) {
-    echo("Error: Can't find valid Authorization in " . $iniFile . "\n");
+if(!array_key_exists('SparkPost', $paramArray) ) {
+    echo("Error: missing [SparkPost] section in " . $iniFile . "\n");
     exit(1);
 }
 
-$httpAdapter = new GuzzleAdapter(new Client());
-$sparky = new SparkPost($httpAdapter, ['key'=>$apiKey, 'timeout'=>0]);
+// Authorization string - needed for sparkpost.com and Enterprise
+if(!array_key_exists('Authorization', $paramArray['SparkPost'])) {
+    echo("Error: Can't find valid Authorization line in " . $iniFile . "\n");
+    exit(1);
+}
+$apiKey = $paramArray['SparkPost']['Authorization'];
+if(is_null($apiKey)) {
+    echo("Error: Can't find valid Authorization line in " . $iniFile . "\n");
+    exit(1);
+}
+
+// Host  - needed only for Enterprise
+if(array_key_exists('Host', $paramArray['SparkPost'])) {
+    $host = $paramArray['SparkPost']['Host'];           // For SparkPost Enterprise
+} else {
+    $host = 'api.sparkpost.com';                        // Default to sparkpost.com if absent
+}
+
+// Return Path - needed only for Enterprise
+if(array_key_exists('Return-Path', $paramArray['SparkPost'])) {
+    $returnPath = $paramArray['SparkPost']['Return-Path'];
+} else
+{
+    $returnPath = '';
+}
+
+// Binding - needed only for Enterprise
+if(array_key_exists('Binding', $paramArray['SparkPost'])) {
+    $binding = $paramArray['SparkPost']['Binding'];
+} else {
+    $binding = '';
+}
 
 // Grab the parameters passed to the program
 $progName = $argv[0];
@@ -94,18 +123,39 @@ $recipsList = [
     "cc" => NULL,
     "bcc" => NULL
 ];
+//
 // Get the headers, and the lists of various types of recipients from the input file, copying across selectively
-
+//
+// "email_rfc822" attribute:
+//      MUST be present (or SparkPost will give an API error response)
+//           From:
+//
+//      SHOULD be present:
+//           Subject:                otherwise you'll have a blank subject-line
+//           To:                     aka the "Envelope To" - for nice presentation in mail client
+//
+//      MAY be present:
+//           Content-type:           if omitted, SparkPost will insert a header with text/plain)
+//           Date:                   if omitted, SparkPost will insert a header with current date/time
+//
+//           Cc:                     |If you're using this form of message address
+//           Bcc:                    |
+//
+// "recipients" attribute MUST be present (or SparkPost will give an API error response)
+//      SHOULD comprise the collected To, Cc, Bcc recipients
+//          See https://support.sparkpost.com/customer/portal/articles/2432290-using-cc-and-bcc-with-the-rest-api
+//
 foreach($msg->data["headers"] as $hdrName => $hdrValue) {
-    switch(strtolower($hdrName)) {
+    switch(ucfirst($hdrName)) {
         // Copy these ones across directly.  Use upper-case leading letter for tidiness
-        case "subject":
-        case "content-type":
+        case "Subject":
+        case "Content-type":
+        case "Date":
             $outputHeaders .= ucfirst($hdrName) . ': '. $hdrValue."\n";
             break;
 
         // Handle From: specifically, to allow sending domain to be modified during testing
-        case "from":
+        case "From":
             if($forcedFrom) {
                 $hdrValue = $forcedFrom;            // command-line debug argument
                 echo("Forced From:\t" . $hdrValue. "\n");
@@ -114,26 +164,25 @@ foreach($msg->data["headers"] as $hdrName => $hdrValue) {
             break;
 
         // Extract To: and use in both header and the envelope (API recipient list)
-        case "to":
+        case "To":
             $recipsList['to'] = mailparse_rfc822_parse_addresses($hdrValue);
             $outputHeaders .= ucfirst($hdrName) . ': '. $hdrValue."\n";
             break;
 
         // cc: headers are handled in similar way
-        case "cc":
+        case "Cc":
             $recipsList['cc'] = mailparse_rfc822_parse_addresses($hdrValue);
             $outputHeaders .= ucfirst($hdrName) . ': '. $hdrValue."\n";
             break;
 
         // bcc: destinations are delivered, but are NOT shown in the headers that can be viewed by recipients
-        case "bcc":
+        case "Bcc":
             $recipsList['bcc'] = mailparse_rfc822_parse_addresses($hdrValue);
             break;
 
         // Just ignore these ones.  If the info is important, we could track it in SparkPost metadata, or insert it as mail headers via the API
-        case "mime-version":
-        case "x-mailer":
-        case "date":
+        case "Mime-version":
+        case "X-mailer":
         default:
             break;
     }
@@ -174,16 +223,30 @@ $rfc822Parts = $outputHeaders . "\n" . $body;
 echo "Headers: " . strlen($outputHeaders) . " bytes\n";
 echo "Body:    " . strlen($body) . " bytes\n\n";
 
-    // Build your email and send it!
-    $startTime = microtime(true);
-    $promise = $sparky->transmissions->post([
-        'content' =>  ['email_rfc822'     => $rfc822Parts],
-        'recipients' => $allRecips,
-        'campaign'   => 'some text',
-        'metadata'   => [
-            'example1' => 'newsletter'
-        ],
-    ]);
+// Open the SparkPost connection -  now includes host parameter for Enterprise / SparkPost.com compatibility
+$httpAdapter = new GuzzleAdapter(new Client());
+$sparky = new SparkPost($httpAdapter, ['key'=>$apiKey, 'timeout'=>0, 'host'=>$host]);
+
+// Build the request structure
+$jsonReq = [
+    'content' =>  ['email_rfc822'     => $rfc822Parts],
+    'recipients' => $allRecips,
+    'campaign'   => 'some text',
+    'metadata'   => [
+        'example1' => 'newsletter'
+    ],
+];
+
+// SparkPost Enterprise additional attributes needed
+if(!is_null($returnPath)) {
+    $jsonReq['return_path'] = $returnPath;
+}
+
+if(!is_null($binding)) {
+    $jsonReq['metadata']['binding'] = $binding;
+}
+$startTime = microtime(true);
+$promise = $sparky->transmissions->post($jsonReq);
 
 try {
     $response = $promise->wait();
@@ -197,9 +260,9 @@ try {
     echo("Transmission id:           " . $results['results']['id'] . "\n");
     echo("API call duration:         " . round($time,3) . " seconds\n");
 
-} catch (\Exception $e) {
-    echo "Message rejected by SparkPost\n";
-    echo $e->getCode()."\n";
-    echo $e->getMessage()."\n";
+} catch (Exception $e) {
+    echo("Message rejected by SparkPost\n");
+    echo($e->getCode()."\n");
+    echo($e->getMessage()."\n");
     exit(1);
 }
